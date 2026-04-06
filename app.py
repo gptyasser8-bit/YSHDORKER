@@ -5,6 +5,9 @@ from concurrent.futures import ThreadPoolExecutor
 
 app = Flask(__name__)
 
+# ✅ تثبيت المسار (مهم جداً في Render)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 
 session = requests.Session()
@@ -100,19 +103,21 @@ def process_item(it, keyword):
 
             task["results"].append(result)
 
+            # ✅ TXT
             with open(task["file_txt"], "a", encoding="utf-8") as f:
                 f.write(f"{url}\n")
                 for s in secrets:
                     f.write(f"{s}\n")
                 f.write("\n")
 
+            # ✅ JSON live save
             with open(task["file_json"], "w", encoding="utf-8") as f:
                 json.dump(task["results"], f, indent=2)
 
             log(f"SECRET FOUND {url}")
 
-    except:
-        pass
+    except Exception as e:
+        log(f"ERROR: {str(e)}")
 
 def grab(keyword, exts):
     headers = {
@@ -120,7 +125,6 @@ def grab(keyword, exts):
     }
 
     seen = set()
-
     keywords = [k.strip() for k in keyword.split(";") if k.strip()]
 
     for k in keywords:
@@ -170,7 +174,8 @@ def grab(keyword, exts):
                     page += 1
                     time.sleep(2)
 
-                except:
+                except Exception as e:
+                    log(f"ERROR LOOP: {str(e)}")
                     break
 
     task["running"] = False
@@ -193,10 +198,14 @@ def start():
     exts = data["ext"] if data["ext"] else ["env"]
 
     name = keyword.replace(";","_")
-    task["file_txt"] = f"{name}.txt"
-    task["file_json"] = f"{name}.json"
 
+    # ✅ مسارات ثابتة
+    task["file_txt"] = os.path.join(BASE_DIR, f"{name}.txt")
+    task["file_json"] = os.path.join(BASE_DIR, f"{name}.json")
+
+    # إنشاء الملفات
     open(task["file_txt"], "w").close()
+    open(task["file_json"], "w").write("[]")
 
     t = threading.Thread(target=grab, args=(keyword, exts))
     t.start()
@@ -222,9 +231,13 @@ def logs():
 @app.route("/download")
 def download():
     t = request.args.get("type","txt")
-    if t=="json":
-        return send_file(task["file_json"], as_attachment=True)
-    return send_file(task["file_txt"], as_attachment=True)
+
+    path = task["file_json"] if t=="json" else task["file_txt"]
+
+    if not path or not os.path.exists(path):
+        return "❌ File not ready yet, wait until scan finishes."
+
+    return send_file(path, as_attachment=True)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
