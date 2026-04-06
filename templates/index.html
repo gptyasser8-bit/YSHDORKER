@@ -5,25 +5,72 @@
 <title>Dorker Ultra</title>
 
 <style>
-body{background:#000;color:#00ffcc;font-family:monospace;padding:10px;}
-
-.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;}
-
-#log{
+body{
 background:#000;
-height:300px;
-overflow:auto;
-border:1px solid #00ffcc;
-margin-top:10px;
-padding:10px;
+color:#00ffcc;
+font-family:monospace;
+padding:12px;
 }
 
+/* تحسين الإدخال */
+input{
+width:100%;
+padding:12px;
+margin-bottom:10px;
+background:#000;
+border:1px solid #00ffcc;
+color:#00ffcc;
+border-radius:10px;
+font-size:16px;
+}
+
+/* grid responsive */
+.grid{
+display:grid;
+grid-template-columns:repeat(2,1fr);
+gap:8px;
+margin-bottom:10px;
+}
+
+/* شاشات كبيرة */
+@media(min-width:700px){
+.grid{
+grid-template-columns:repeat(4,1fr);
+}
+}
+
+label{
+border:1px solid #00ffcc;
+padding:6px;
+border-radius:8px;
+text-align:center;
+font-size:14px;
+}
+
+/* أزرار */
+button{
+padding:10px;
+margin:5px 3px;
+border:none;
+border-radius:10px;
+font-weight:bold;
+cursor:pointer;
+}
+
+.start{background:#00ffcc;color:#000;}
+.stop{background:#ff4d4d;color:#fff;}
+.down{background:#00ff41;color:#000;}
+.ctrl{background:#333;color:#fff;}
+
+/* stats */
 .stats{
 display:flex;
 justify-content:space-between;
 margin-top:10px;
+font-size:14px;
 }
 
+/* progress */
 .progress{
 height:6px;
 background:#222;
@@ -37,29 +84,45 @@ height:100%;
 width:0%;
 background:#00ffcc;
 }
+
+/* log */
+#log{
+background:#000;
+height:320px;
+overflow:auto;
+border:1px solid #00ffcc;
+margin-top:12px;
+padding:10px;
+border-radius:12px;
+font-size:13px;
+}
 </style>
 
 </head>
 
 <body>
 
-<input id="keyword" placeholder="aws;stripe">
+<input id="keyword" placeholder="aws;stripe;token">
 
 <div class="grid">
 {% for e in exts %}
-<label><input type="checkbox" class="extbox" value="{{e}}"> {{e}}</label>
+<label>
+<input type="checkbox" class="extbox" value="{{e}}"> {{e}}
+</label>
 {% endfor %}
 </div>
 
-<button onclick="selectAll()">Select All</button>
-<button onclick="clearAll()">Clear</button>
+<div>
+<button class="ctrl" onclick="selectAll()">Select All</button>
+<button class="ctrl" onclick="clearAll()">Clear</button>
+</div>
 
-<br>
-
-<button onclick="start()">START</button>
-<button onclick="stop()">STOP</button>
-<button onclick="download('txt')">TXT</button>
-<button onclick="download('json')">JSON</button>
+<div>
+<button class="start" onclick="start()">START</button>
+<button class="stop" onclick="stop()">STOP</button>
+<button class="down" onclick="download('txt')">TXT</button>
+<button class="down" onclick="download('json')">JSON</button>
+</div>
 
 <div class="stats">
 <div>Found: <span id="found">0</span></div>
@@ -83,20 +146,27 @@ let el=document.getElementById("log")
 let line=document.createElement("div")
 line.textContent=t
 
-// لون خاص للفاوند
 if(t.includes("SECRET FOUND")){
 line.style.color="#00ff41"
 }
-if(t.includes("Checking")){
+else if(t.includes("Checking")){
 line.style.color="#00ccff"
+}
+else if(t.includes("ERROR")){
+line.style.color="#ff4d4d"
 }
 
 el.appendChild(line)
 el.scrollTop=el.scrollHeight
 }
 
-function selectAll(){document.querySelectorAll(".extbox").forEach(e=>e.checked=true)}
-function clearAll(){document.querySelectorAll(".extbox").forEach(e=>e.checked=false)}
+function selectAll(){
+document.querySelectorAll(".extbox").forEach(e=>e.checked=true)
+}
+
+function clearAll(){
+document.querySelectorAll(".extbox").forEach(e=>e.checked=false)
+}
 
 function getExt(){
 let ex=[]
