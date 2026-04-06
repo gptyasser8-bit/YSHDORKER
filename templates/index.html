@@ -6,17 +6,92 @@
 <title>Dorker Ultra MAX</title>
 
 <style>
-body{background:#050505;color:#00ffcc;font-family:monospace;padding:15px;}
-.title{text-align:center;font-size:26px;text-shadow:0 0 15px #00ffcc;margin-bottom:20px;}
-.container{max-width:800px;margin:auto;}
-input{width:100%;padding:10px;margin-bottom:10px;background:#0a0a0a;border:1px solid #00ffcc;color:#00ffcc;border-radius:8px;}
-button{padding:10px;margin:4px;border:none;border-radius:8px;font-weight:bold;cursor:pointer;}
+body{
+background:#050505;
+color:#00ffcc;
+font-family:monospace;
+padding:15px;
+}
+
+.title{
+text-align:center;
+font-size:28px;
+text-shadow:0 0 15px #00ffcc;
+margin-bottom:20px;
+}
+
+.container{
+max-width:800px;
+margin:auto;
+}
+
+input{
+width:100%;
+padding:12px;
+margin-bottom:10px;
+background:#0a0a0a;
+border:1px solid #00ffcc;
+color:#00ffcc;
+border-radius:10px;
+}
+
+button{
+padding:10px;
+margin:5px;
+border:none;
+border-radius:10px;
+cursor:pointer;
+font-weight:bold;
+}
+
 .start{background:#00ffcc;color:#000;}
 .stop{background:#ff4d4d;color:#fff;}
-.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;}
-.ext{border:1px solid #00ffcc;padding:5px;text-align:center;border-radius:6px;}
-#log{background:black;height:200px;overflow:auto;margin-top:10px;padding:10px;}
-.card{border:1px solid #00ffcc;padding:8px;margin-top:8px;border-radius:8px;}
+.download{background:#00ff41;color:#000;}
+
+.grid{
+display:grid;
+grid-template-columns:repeat(4,1fr);
+gap:8px;
+margin-bottom:10px;
+}
+
+.ext{
+background:#0a0a0a;
+padding:6px;
+border-radius:6px;
+text-align:center;
+border:1px solid #00ffcc;
+}
+
+#log{
+background:#000;
+height:300px;
+overflow:auto;
+padding:10px;
+border-radius:10px;
+border:1px solid #00ffcc;
+margin-top:10px;
+}
+
+.stats{
+display:flex;
+justify-content:space-between;
+margin-top:10px;
+}
+
+.progress{
+height:6px;
+background:#222;
+margin-top:10px;
+border-radius:10px;
+overflow:hidden;
+}
+
+.fill{
+height:100%;
+width:0%;
+background:#00ffcc;
+}
 </style>
 </head>
 
@@ -30,7 +105,9 @@ button{padding:10px;margin:4px;border:none;border-radius:8px;font-weight:bold;cu
 
 <div class="grid">
 {% for e in exts %}
-<label class="ext"><input type="checkbox" class="extbox" value="{{e}}"> {{e}}</label>
+<label class="ext">
+<input type="checkbox" class="extbox" value="{{e}}"> {{e}}
+</label>
 {% endfor %}
 </div>
 
@@ -41,29 +118,42 @@ button{padding:10px;margin:4px;border:none;border-radius:8px;font-weight:bold;cu
 
 <button class="start" onclick="start()">START</button>
 <button class="stop" onclick="stop()">STOP</button>
-<button onclick="download('txt')">TXT</button>
-<button onclick="download('json')">JSON</button>
+<button class="download" onclick="download('txt')">TXT</button>
+<button class="download" onclick="download('json')">JSON</button>
 
-<div>Found: <span id="found">0</span> | Speed: <span id="speed">0</span>/s</div>
+<div class="stats">
+<div>Found: <span id="found">0</span></div>
+<div>Speed: <span id="speed">0</span>/s</div>
+</div>
+
+<div class="progress">
+<div class="fill" id="bar"></div>
+</div>
 
 <div id="log"></div>
-<div id="results"></div>
 
 </div>
 
 <script>
 let source;
+let found=0;
+let startTime;
 
 function log(t){
 let el=document.getElementById("log")
-let d=document.createElement("div")
-d.textContent=t
-el.appendChild(d)
+let line=document.createElement("div")
+line.textContent=t
+el.appendChild(line)
 el.scrollTop=el.scrollHeight
 }
 
-function selectAll(){document.querySelectorAll(".extbox").forEach(e=>e.checked=true)}
-function clearAll(){document.querySelectorAll(".extbox").forEach(e=>e.checked=false)}
+function selectAll(){
+document.querySelectorAll(".extbox").forEach(e=>e.checked=true)
+}
+
+function clearAll(){
+document.querySelectorAll(".extbox").forEach(e=>e.checked=false)
+}
 
 function getExt(){
 let ex=[]
@@ -72,6 +162,10 @@ return ex
 }
 
 function start(){
+found=0
+document.getElementById("log").innerHTML=""
+startTime=Date.now()
+
 fetch("/start",{
 method:"POST",
 headers:{'Content-Type':'application/json'},
@@ -82,10 +176,25 @@ ext:getExt()
 })
 
 if(source) source.close()
-source=new EventSource("/logs")
-source.onmessage=e=>log(e.data)
+source = new EventSource("/logs")
 
-setInterval(loadResults,1000)
+source.onmessage = e=>{
+log(e.data)
+
+if(e.data.includes("SECRET FOUND")){
+found++
+
+document.getElementById("found").innerText=found
+
+let elapsed=(Date.now()-startTime)/1000
+let speed=(found/elapsed).toFixed(1)
+
+document.getElementById("speed").innerText=speed
+
+let progress=Math.min(found*2,100)
+document.getElementById("bar").style.width=progress+"%"
+}
+}
 }
 
 function stop(){
@@ -93,23 +202,8 @@ fetch("/stop",{method:"POST"})
 if(source) source.close()
 }
 
-function download(t){
-window.open("/download?type="+t)
-}
-
-async function loadResults(){
-let r=await fetch("/results")
-let data=await r.json()
-
-document.getElementById("found").innerText=data.found
-document.getElementById("speed").innerText=data.speed
-
-let div=document.getElementById("results")
-div.innerHTML=""
-
-data.results.slice(-50).forEach(x=>{
-div.innerHTML+=`<div class="card">${x.url}<br>${x.secrets.join("<br>")}</div>`
-})
+function download(type){
+window.open("/download?type="+type)
 }
 </script>
 
