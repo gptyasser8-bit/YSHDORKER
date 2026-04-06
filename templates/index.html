@@ -1,47 +1,171 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Dorker Pro</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dorker Ultra</title>
+
 <style>
-body{background:#0a0a0a;color:#00ff41;font-family:monospace;padding:20px}
-input,button{padding:10px;margin:5px;background:#111;border:1px solid #00ff41;color:#00ff41}
-#log{height:300px;overflow:auto;background:black;padding:10px}
-.card{border:1px solid #00ff41;padding:10px;margin-top:10px}
+body{
+background:#050505;
+color:#00ffcc;
+font-family:monospace;
+padding:15px;
+}
+
+.title{
+text-align:center;
+font-size:28px;
+font-weight:bold;
+text-shadow:0 0 15px #00ffcc;
+margin-bottom:20px;
+}
+
+.container{
+max-width:700px;
+margin:auto;
+}
+
+input{
+width:100%;
+padding:12px;
+margin-bottom:10px;
+background:#0a0a0a;
+border:1px solid #00ffcc;
+color:#00ffcc;
+border-radius:10px;
+}
+
+button{
+padding:12px;
+margin:5px;
+border:none;
+border-radius:10px;
+cursor:pointer;
+font-weight:bold;
+}
+
+.start{background:#00ffcc;color:#000;}
+.stop{background:#ff4d4d;color:#fff;}
+
+#log{
+background:#000;
+height:250px;
+overflow:auto;
+padding:10px;
+border-radius:10px;
+border:1px solid #00ffcc;
+margin-top:10px;
+}
+
+.card{
+background:#0a0a0a;
+border:1px solid #00ffcc;
+padding:10px;
+margin-top:10px;
+border-radius:10px;
+}
+
+.stats{
+display:flex;
+justify-content:space-between;
+margin-top:10px;
+}
+
+.stat{
+text-align:center;
+}
+
+.progress{
+height:5px;
+background:#222;
+margin-top:10px;
+border-radius:10px;
+overflow:hidden;
+}
+
+.fill{
+height:100%;
+width:0%;
+background:#00ffcc;
+}
 </style>
 </head>
 
 <body>
 
-<h2>⚡ DORKER PRO ⚡</h2>
+<div class="title">⚡ DORKER ULTRA ⚡</div>
 
-<input id="keyword" placeholder="keyword">
+<div class="container">
+
+<input id="keyword" placeholder="aws;stripe;token">
 <input id="ext" placeholder="env">
 
-<br>
-<button onclick="start()">START</button>
-<button onclick="stop()">STOP</button>
+<div>
+<button class="start" onclick="start()">START</button>
+<button class="stop" onclick="stop()">STOP</button>
+</div>
+
+<div class="stats">
+<div class="stat">Found<br><span id="found">0</span></div>
+<div class="stat">Speed<br><span id="speed">0/s</span></div>
+</div>
+
+<div class="progress">
+<div class="fill" id="bar"></div>
+</div>
 
 <div id="log"></div>
 <div id="results"></div>
 
+</div>
+
 <script>
 let source;
+let found=0;
+let startTime;
 
 function log(t){
-document.getElementById("log").innerHTML += t+"<br>"
+let el=document.getElementById("log")
+el.innerHTML += t+"<br>"
+el.scrollTop = el.scrollHeight
 }
 
 function start(){
-fetch("/start",{method:"POST",headers:{'Content-Type':'application/json'},
-body:JSON.stringify({keyword:keyword.value,ext:ext.value})})
+found=0
+document.getElementById("results").innerHTML=""
+document.getElementById("log").innerHTML=""
+startTime=Date.now()
+
+fetch("/start",{
+method:"POST",
+headers:{'Content-Type':'application/json'},
+body:JSON.stringify({
+keyword:keyword.value,
+ext:ext.value
+})
+})
 
 if(source) source.close()
 source = new EventSource("/logs")
 
-source.onmessage = e => log(e.data)
+source.onmessage = e=>{
+log(e.data)
 
-setInterval(loadResults,3000)
+if(e.data.includes("FOUND")){
+found++
+document.getElementById("found").innerText=found
+
+let elapsed=(Date.now()-startTime)/1000
+let speed=(found/elapsed).toFixed(1)
+document.getElementById("speed").innerText=speed+"/s"
+
+let progress=Math.min(found*5,100)
+document.getElementById("bar").style.width=progress+"%"
+}
+}
+
+setInterval(loadResults,2000)
 }
 
 function stop(){
@@ -58,7 +182,8 @@ div.innerHTML=""
 
 data.forEach(x=>{
 div.innerHTML += `<div class="card">
-${x.url}<br>${x.secrets.join("<br>")}
+<b>${x.url}</b><br>
+${x.secrets.join("<br>")}
 </div>`
 })
 }
