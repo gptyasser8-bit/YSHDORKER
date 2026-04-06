@@ -6,8 +6,6 @@ from concurrent.futures import ThreadPoolExecutor
 app = Flask(__name__)
 
 # ===== TOKENS =====
-# ضع عدة توكنات مفصولة بفاصلة داخل Environment Variable:
-# GITHUB_TOKEN=tok1,tok2,tok3
 TOKENS = [t.strip() for t in (os.getenv("GITHUB_TOKEN") or "").split(",") if t.strip()]
 token_index = 0
 
@@ -19,14 +17,12 @@ def get_token():
     token_index = (token_index + 1) % len(TOKENS)
     return t
 
-# ===== SESSION (HIGH PERFORMANCE) =====
+# ===== SESSION =====
 session = requests.Session()
-adapter = HTTPAdapter(pool_connections=100, pool_maxsize=100)
+adapter = HTTPAdapter(pool_connections=50, pool_maxsize=50)
 session.mount("https://", adapter)
-session.mount("http://", adapter)
 
-# Threads
-executor = ThreadPoolExecutor(max_workers=25)
+executor = ThreadPoolExecutor(max_workers=10)  # موزون (لا يقتل النتائج)
 
 task = {
     "running": False,
@@ -40,14 +36,16 @@ task = {
 }
 
 EXTENSIONS = [
-"env","json","yaml","yml","ini","conf","txt","log",
-"sql","xml","config","properties","pem","key","crt","p12","py"
+"env","json","yaml","yml",
+"ini","conf","txt","log",
+"sql","xml","config","properties",
+"pem","key","crt","p12","py"
 ]
 
 IGNORE_WORDS = [
-"example","sample","dummy","test","demo","replace","changeme",
-"placeholder","fake","tutorial","template","null","none",
-"docs","documentation","mock","sandbox"
+    "example","sample","dummy","test","demo","replace","changeme",
+    "placeholder","fake","tutorial","template","null","none",
+    "docs","documentation","mock","sandbox"
 ]
 
 SECRET_PATTERNS = [
@@ -78,31 +76,34 @@ SECRET_PATTERNS = [
     r'0x[a-fA-F0-9]{40}'
 ]
 
-# ===== UTILS =====
+# ===== FUNCTIONS =====
 def log(msg):
     task["logs"].append(msg)
-    if len(task["logs"]) > 800:
+    if len(task["logs"]) > 600:
         task["logs"].pop(0)
 
-def scan(text):
-    out = []
-    for p in SECRET_PATTERNS:
-        out += re.findall(p, text, re.I)
-    return list(set(out))
+def scan_secrets(text):
+    findings=[]
+    for pattern in SECRET_PATTERNS:
+        findings.extend(re.findall(pattern,text,re.IGNORECASE))
+    return list(set(findings))
 
 def process_item(it, keyword):
     if not task["running"]:
         return
 
     url = it["html_url"]
+
     if any(x in url.lower() for x in IGNORE_WORDS):
         return
 
     raw = url.replace("github.com","raw.githubusercontent.com").replace("/blob","")
 
     try:
+        log(f"Checking {url}")
+
         txt = session.get(raw, timeout=6).text
-        secrets = scan(txt)
+        secrets = scan_secrets(txt)
 
         if secrets:
             task["found"] += 1
@@ -116,14 +117,20 @@ def process_item(it, keyword):
 
             task["results"].append(result)
 
-            # TXT
+            # TXT format (نفس كودك)
             with open(task["file_txt"], "a", encoding="utf-8") as f:
-                f.write(f"KEYWORD: {keyword}\nFILE: {url}\nRAW: {raw}\n")
+                f.write(f"KEYWORD: {keyword}\n")
+                f.write(f"FILE: {url}\n")
+                f.write(f"RAW: {raw}\n")
                 for s in secrets:
                     f.write(f"SECRET: {s}\n")
-                f.write("\n----------------------\n\n")
+                f.write("\n---------------------\n\n")
 
-            log(f"🔥 FOUND {url}")
+            # JSON live update
+            with open(task["file_json"], "w", encoding="utf-8") as f:
+                json.dump(task["results"], f, indent=2)
+
+            log(f"SECRET FOUND {url}")
 
     except:
         pass
@@ -132,48 +139,54 @@ def scan_query(keyword, ext):
     seen = set()
     page = 1
 
+    queries = [
+        f"{keyword} extension:{ext}",
+        f"{keyword} {ext}",
+        f"{keyword} filename:{ext}"
+    ]
+
     while task["running"]:
-        try:
-            token = get_token()
-            headers = {"Authorization": f"token {token}"} if token else {}
+        for q in queries:
+            try:
+                token = get_token()
+                headers = {"Authorization": f"token {token}"} if token else {}
 
-            r = session.get(
-                "https://api.github.com/search/code",
-                headers=headers,
-                params={
-                    "q": f"{keyword} extension:{ext}",
-                    "sort": "indexed",
-                    "order": "desc",
-                    "page": page,
-                    "per_page": 100
-                },
-                timeout=15
-            )
+                r = session.get(
+                    "https://api.github.com/search/code",
+                    headers=headers,
+                    params={
+                        "q": q,
+                        "sort": "indexed",
+                        "order": "desc",
+                        "page": page,
+                        "per_page": 100
+                    },
+                    timeout=15
+                )
 
-            if r.status_code == 403:
-                log("⚠️ RATE LIMIT - rotating token...")
-                time.sleep(2)
-                continue
+                if r.status_code == 403:
+                    log("Rate limit... switching token")
+                    time.sleep(2)
+                    continue
 
-            if r.status_code != 200:
-                log(f"API ERROR {r.status_code}")
-                break
+                if r.status_code != 200:
+                    break
 
-            items = r.json().get("items", [])
-            if not items:
-                break
+                items = r.json().get("items", [])
+                if not items:
+                    continue
 
-            new_items = [i for i in items if i["html_url"] not in seen]
-            for i in new_items:
-                seen.add(i["html_url"])
+                new_items = [i for i in items if i["html_url"] not in seen]
+                for i in new_items:
+                    seen.add(i["html_url"])
 
-            list(executor.map(lambda it: process_item(it, keyword), new_items))
+                executor.map(lambda it: process_item(it, keyword), new_items)
 
-            page += 1
-            time.sleep(0.3)
+            except:
+                pass
 
-        except:
-            break
+        page += 1
+        time.sleep(1)
 
 def grab(keywords, exts):
     threads = []
@@ -187,12 +200,8 @@ def grab(keywords, exts):
     for t in threads:
         t.join()
 
-    # save JSON
-    with open(task["file_json"], "w", encoding="utf-8") as f:
-        json.dump(task["results"], f, indent=2)
-
     task["running"] = False
-    log("✅ DONE")
+    log("Finished ✅")
 
 # ===== ROUTES =====
 @app.route("/")
@@ -210,7 +219,6 @@ def start():
     task["start_time"] = time.time()
 
     name = d["keyword"].replace(";","_").replace(" ","_")
-    task["display_name"] = name
 
     task["file_txt"] = f"{name}.txt"
     task["file_json"] = f"{name}.json"
@@ -218,7 +226,7 @@ def start():
     open(task["file_txt"], "w").close()
 
     keywords = [k.strip() for k in d["keyword"].split(";") if k.strip()]
-    exts = d["ext"]
+    exts = d["ext"] if d["ext"] else ["env"]
 
     t = threading.Thread(target=grab, args=(keywords, exts))
     t.start()
@@ -238,18 +246,8 @@ def logs():
             if len(task["logs"]) > i:
                 yield f"data: {task['logs'][i]}\n\n"
                 i += 1
-            time.sleep(0.1)
+            time.sleep(0.15)
     return Response(stream(), mimetype="text/event-stream")
-
-@app.route("/results")
-def results():
-    elapsed = max(time.time() - (task["start_time"] or time.time()), 1)
-    speed = round(task["found"] / elapsed, 2)
-    return jsonify({
-        "results": task["results"],
-        "found": task["found"],
-        "speed": speed
-    })
 
 @app.route("/download")
 def download():
