@@ -2,12 +2,41 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Dorker</title>
+<title>Dorker Ultra</title>
 
 <style>
 body{background:#000;color:#00ffcc;font-family:monospace;padding:10px;}
+
 .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;}
-#log{background:#000;height:300px;overflow:auto;border:1px solid #00ffcc;margin-top:10px;padding:10px;}
+
+#log{
+background:#000;
+height:300px;
+overflow:auto;
+border:1px solid #00ffcc;
+margin-top:10px;
+padding:10px;
+}
+
+.stats{
+display:flex;
+justify-content:space-between;
+margin-top:10px;
+}
+
+.progress{
+height:6px;
+background:#222;
+margin-top:10px;
+border-radius:10px;
+overflow:hidden;
+}
+
+.fill{
+height:100%;
+width:0%;
+background:#00ffcc;
+}
 </style>
 
 </head>
@@ -32,16 +61,37 @@ body{background:#000;color:#00ffcc;font-family:monospace;padding:10px;}
 <button onclick="download('txt')">TXT</button>
 <button onclick="download('json')">JSON</button>
 
+<div class="stats">
+<div>Found: <span id="found">0</span></div>
+<div>Speed: <span id="speed">0</span>/s</div>
+</div>
+
+<div class="progress">
+<div class="fill" id="bar"></div>
+</div>
+
 <div id="log"></div>
 
 <script>
 let source;
+let found=0;
+let startTime;
 
 function log(t){
 let el=document.getElementById("log")
-let d=document.createElement("div")
-d.textContent=t
-el.appendChild(d)
+
+let line=document.createElement("div")
+line.textContent=t
+
+// لون خاص للفاوند
+if(t.includes("SECRET FOUND")){
+line.style.color="#00ff41"
+}
+if(t.includes("Checking")){
+line.style.color="#00ccff"
+}
+
+el.appendChild(line)
 el.scrollTop=el.scrollHeight
 }
 
@@ -55,6 +105,10 @@ return ex
 }
 
 function start(){
+found=0
+document.getElementById("log").innerHTML=""
+startTime=Date.now()
+
 fetch("/start",{
 method:"POST",
 headers:{'Content-Type':'application/json'},
@@ -66,7 +120,24 @@ ext:getExt()
 
 if(source) source.close()
 source=new EventSource("/logs")
-source.onmessage=e=>log(e.data)
+
+source.onmessage=e=>{
+log(e.data)
+
+if(e.data.includes("SECRET FOUND")){
+found++
+
+document.getElementById("found").innerText=found
+
+let elapsed=(Date.now()-startTime)/1000
+let speed=(found/elapsed).toFixed(1)
+
+document.getElementById("speed").innerText=speed
+
+let progress=Math.min(found*2,100)
+document.getElementById("bar").style.width=progress+"%"
+}
+}
 }
 
 function stop(){
