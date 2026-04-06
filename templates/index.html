@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Dorker Pro</title>
+<style>
+body{background:#0a0a0a;color:#00ff41;font-family:monospace;padding:20px}
+input,button{padding:10px;margin:5px;background:#111;border:1px solid #00ff41;color:#00ff41}
+#log{height:300px;overflow:auto;background:black;padding:10px}
+.card{border:1px solid #00ff41;padding:10px;margin-top:10px}
+</style>
+</head>
+
+<body>
+
+<h2>⚡ DORKER PRO ⚡</h2>
+
+<input id="keyword" placeholder="keyword">
+<input id="ext" placeholder="env">
+
+<br>
+<button onclick="start()">START</button>
+<button onclick="stop()">STOP</button>
+
+<div id="log"></div>
+<div id="results"></div>
+
+<script>
+let source;
+
+function log(t){
+document.getElementById("log").innerHTML += t+"<br>"
+}
+
+function start(){
+fetch("/start",{method:"POST",headers:{'Content-Type':'application/json'},
+body:JSON.stringify({keyword:keyword.value,ext:ext.value})})
+
+if(source) source.close()
+source = new EventSource("/logs")
+
+source.onmessage = e => log(e.data)
+
+setInterval(loadResults,3000)
+}
+
+function stop(){
+fetch("/stop",{method:"POST"})
+if(source) source.close()
+}
+
+async function loadResults(){
+let r = await fetch("/results")
+let data = await r.json()
+
+let div = document.getElementById("results")
+div.innerHTML=""
+
+data.forEach(x=>{
+div.innerHTML += `<div class="card">
+${x.url}<br>${x.secrets.join("<br>")}
+</div>`
+})
+}
+</script>
+
+</body>
+</html>
