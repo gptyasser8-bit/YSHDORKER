@@ -35,7 +35,7 @@ EXTENSIONS = [
 "env","json","yaml","yml",
 "ini","conf","txt","log",
 "sql","xml","config","properties",
-"pem","key","crt","p12","py"
+"pem","key","crt","p12","py","csv"
 ]
 
 IGNORE_WORDS = [
